@@ -1,0 +1,14 @@
+[project]
+name = "football-ml"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "dvc>=3.67.1",
+    "jupyterlab>=4.5.7",
+    "pandas>=3.0.3",
+    "polars>=1.41.0",
+    "python-dotenv>=1.2.2",
+    "requests>=2.34.2",
+]
