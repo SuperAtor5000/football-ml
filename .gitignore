@@ -1,0 +1,29 @@
+# Entorno virtual - nunca se sube
+.venv/
+
+# Datos - los gestiona DVC, no git
+data/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# MLflow
+mlruns/
+
+# Variables de entorno y credenciales - NUNCA se suben
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# VS Code
+.vscode/
+
+# Windows
+Thumbs.db
+desktop.ini
