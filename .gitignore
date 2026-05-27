@@ -1,8 +1,11 @@
 # Entorno virtual - nunca se sube
 .venv/
 
+
 # Datos - los gestiona DVC, no git
-data/
+data/raw/laliga/
+data/processed/
+data/features/
 
 # Jupyter checkpoints
 .ipynb_checkpoints/
