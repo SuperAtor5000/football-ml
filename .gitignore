@@ -27,3 +27,6 @@ build/
 # Windows
 Thumbs.db
 desktop.ini
+
+# Others
+experiments/
