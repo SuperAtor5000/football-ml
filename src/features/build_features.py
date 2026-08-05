@@ -39,6 +39,15 @@ def calculate_elo(df: pd.DataFrame) -> pd.DataFrame:
             previous_season_teams = current_season_teams.copy()
             current_season_teams = set()
             initialized_this_season = set()
+
+            # Apply mean reversion to all teams when season changes
+            if current_season is not None:
+                for team in elo_ratings:
+                    elo_ratings[team] = (
+                        elo_ratings[team] * (1 - MEAN_REVERSION_FACTOR)
+                        + INITIAL_ELO * MEAN_REVERSION_FACTOR
+                    )
+
             current_season = season
 
         current_season_teams.add(home_team)
