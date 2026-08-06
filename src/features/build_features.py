@@ -96,18 +96,158 @@ def calculate_elo(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def build_team_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """Build a DataFrame with team-level features."""
+
+    home_rows = []
+    away_rows = []
+
+    for _, row in df.iterrows():
+        # Home team row
+        home_rows.append(
+            {
+                "Date": row["Date"],
+                "Season": row["Season"],
+                "team": row["HomeTeam"],
+                "opponent": row["AwayTeam"],
+                "is_home": True,
+                "goals_scored": row["FTHG"],
+                "goals_conceded": row["FTAG"],
+                "shots_on_target": row["HST"],
+                "shots_on_target_conceded": row["AST"],
+                "corners": row["HC"],
+                "corners_conceded": row["AC"],
+                "fouls": row["HF"],
+                "fouls_conceded": row["AF"],
+                "points": 3 if row["FTR"] == "H" else 1 if row["FTR"] == "D" else 0,
+            }
+        )
+
+        # Away team row
+        away_rows.append(
+            {
+                "Date": row["Date"],
+                "Season": row["Season"],
+                "team": row["AwayTeam"],
+                "opponent": row["HomeTeam"],
+                "is_home": False,
+                "goals_scored": row["FTAG"],
+                "goals_conceded": row["FTHG"],
+                "shots_on_target": row["AST"],
+                "shots_on_target_conceded": row["HST"],
+                "corners": row["AC"],
+                "corners_conceded": row["HC"],
+                "fouls": row["AF"],
+                "fouls_conceded": row["HF"],
+                "points": 3 if row["FTR"] == "A" else 1 if row["FTR"] == "D" else 0,
+            }
+        )
+
+    team_df = pd.concat([pd.DataFrame(home_rows), pd.DataFrame(away_rows)])
+    team_df = team_df.sort_values(["team", "Date"]).reset_index(drop=True)
+    team_df["matchday"] = team_df.groupby(["team", "Season"]).cumcount() + 1
+
+    return team_df
+
+
+def calculate_rolling_features(
+    team_df: pd.DataFrame, windows_matches: list[int] = [3, 5, 7, 10]
+) -> pd.DataFrame:
+    """Calculate rolling features for each team based on specified windows."""
+
+    stats = [
+        "goals_scored",
+        "goals_conceded",
+        "shots_on_target",
+        "shots_on_target_conceded",
+        "corners",
+        "corners_conceded",
+        "fouls",
+        "fouls_conceded",
+        "points",
+    ]
+
+    for window in windows_matches:
+        for stat in stats:
+            team_df[f"{stat}_last{window}_matches"] = team_df.groupby(
+                ["team", "Season"]
+            )[stat].transform(
+                lambda x: x.shift(1).rolling(window, min_periods=1).mean()
+            )
+
+    return team_df
+
+
+def merge_rolling_features(
+    df_with_elo: pd.DataFrame, team_df_with_rolling_features: pd.DataFrame
+) -> pd.DataFrame:
+    """Merge rolling features back to the original DataFrame."""
+
+    # Columnas rolling que quieres renombrar
+    rolling_cols = [
+        c
+        for c in team_df_with_rolling_features.columns
+        if "_last" in c or c == "matchday"
+    ]
+
+    # Versión para equipo local
+    home_df = team_df_with_rolling_features[
+        ["Date", "Season", "team"] + rolling_cols
+    ].rename(columns={col: f"HomeTeam_{col}" for col in rolling_cols})
+
+    # Versión para equipo visitante
+    away_df = team_df_with_rolling_features[
+        ["Date", "Season", "team"] + rolling_cols
+    ].rename(columns={col: f"AwayTeam_{col}" for col in rolling_cols})
+
+    # Merge
+    final_df = df_with_elo.merge(
+        home_df,
+        left_on=["Date", "Season", "HomeTeam"],
+        right_on=["Date", "Season", "team"],
+        how="left",
+    ).drop(columns="team")
+
+    final_df = final_df.merge(
+        away_df,
+        left_on=["Date", "Season", "AwayTeam"],
+        right_on=["Date", "Season", "team"],
+        how="left",
+    ).drop(columns="team")
+
+    return final_df
+
+
+def build_elo_and_rolling_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Build ELO and rolling features for the dataset."""
+
+    # Calculate ELO ratings
+    df_with_elo = calculate_elo(df)
+
+    # Build team-level DataFrame
+    team_df = build_team_dataframe(df_with_elo)
+
+    # Calculate rolling features
+    team_df_with_rolling_features = calculate_rolling_features(team_df)
+
+    # Merge the rolling features back to the original DataFrame
+    final_df = merge_rolling_features(df_with_elo, team_df_with_rolling_features)
+
+    return final_df
+
+
 def main():
     # Load the processed data
     processed_data_file = PROCESSED_DATA_DIR / "laliga.csv"
     df = pd.read_csv(processed_data_file)
 
     # Calculate ELO ratings
-    df_with_elo = calculate_elo(df)
+    df_with_elo_and_rolling_features = build_elo_and_rolling_features(df)
 
     # Save the DataFrame with ELO ratings to a new CSV file
     features_data_file = FEATURES_DATA_DIR / "laliga_features.csv"
     FEATURES_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    df_with_elo.to_csv(features_data_file, index=False)
+    df_with_elo_and_rolling_features.to_csv(features_data_file, index=False)
     print(f"Features data with ELO ratings saved to {features_data_file}")
 
 
