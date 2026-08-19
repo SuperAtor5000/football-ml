@@ -109,6 +109,33 @@ def normalize_odds(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def add_market_movement(df: pd.DataFrame) -> pd.DataFrame:
+    """Add market movement features based on opening/closing odds."""
+    movements_H = [
+        df["PS_norm_CH"] - df["PS_norm_H"],
+        df["B365_norm_CH"] - df["B365_norm_H"],
+        df["BW_norm_CH"] - df["BW_norm_H"],
+        df["WH_norm_CH"] - df["WH_norm_H"],
+    ]
+    movements_D = [
+        df["PS_norm_CD"] - df["PS_norm_D"],
+        df["B365_norm_CD"] - df["B365_norm_D"],
+        df["BW_norm_CD"] - df["BW_norm_D"],
+        df["WH_norm_CD"] - df["WH_norm_D"],
+    ]
+    movements_A = [
+        df["PS_norm_CA"] - df["PS_norm_A"],
+        df["B365_norm_CA"] - df["B365_norm_A"],
+        df["BW_norm_CA"] - df["BW_norm_A"],
+        df["WH_norm_CA"] - df["WH_norm_A"],
+    ]
+
+    df["market_movement_H"] = pd.concat(movements_H, axis=1).mean(axis=1)
+    df["market_movement_D"] = pd.concat(movements_D, axis=1).mean(axis=1)
+    df["market_movement_A"] = pd.concat(movements_A, axis=1).mean(axis=1)
+    return df
+
+
 def select_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Select the desired columns for the final dataset."""
 
@@ -162,6 +189,9 @@ def select_columns(df: pd.DataFrame) -> pd.DataFrame:
         "WH_norm_CH",
         "WH_norm_CD",
         "WH_norm_CA",
+        "market_movement_H",
+        "market_movement_D",
+        "market_movement_A",
     ]
 
     log.info(f"Selected columns for the final dataset: {len(selected_columns)}")
@@ -186,7 +216,8 @@ def main():
     df_raw = load_raw_data()
     df_cleaned = clean_data(df_raw)
     df_normalized = normalize_odds(df_cleaned)
-    df_final = select_columns(df_normalized)
+    df_market_movement = add_market_movement(df_normalized)
+    df_final = select_columns(df_market_movement)
     save_processed_data(df_final)
     log.info("Data processing completed successfully.")
 
