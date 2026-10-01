@@ -13,6 +13,7 @@ notebooks/.ipynb_checkpoints/
 
 # MLflow
 mlruns/
+mlflow.db
 
 # Variables de entorno y credenciales - NUNCA se suben
 .env
