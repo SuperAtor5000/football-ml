@@ -53,10 +53,10 @@ def train_model_logistic_regression(df: pd.DataFrame):
     return X_train_scaled, y_train, X_val_scaled, y_val, X_test_scaled, y_test
 
 
-def train_model_xgboost(df: pd.DataFrame):
+def train_model_xgboost(df: pd.DataFrame, include_market):
     """Train a XGBoost model on the provided DataFrame."""
     df_train, df_val, df_test = divide_df_train_val_test(df)
-    feature_columns = select_features()
+    feature_columns = select_features(include_market)
 
     print(f"Train: {len(df_train)}, Val: {len(df_val)}, Test: {len(df_test)}")
     # print(df.columns.tolist())
@@ -152,10 +152,12 @@ def save_metrics_to_mlflow(
     brier_score_test,
     accuracy_test,
     model_type,
+    include_market,
 ):
     with mlflow.start_run():
         """Save the evaluation metrics to MLflow."""
         mlflow.log_param("model_type", model_type)
+        mlflow.log_param("include_market", include_market)
         mlflow.log_metric("log_loss_val", log_loss_val)
         mlflow.log_metric("brier_score_val", brier_score_val)
         mlflow.log_metric("accuracy_val", accuracy_val)
@@ -186,7 +188,7 @@ def divide_df_train_val_test(df: pd.DataFrame):
     return df_train, df_val, df_test
 
 
-def select_features():
+def select_features(include_market=True):
     """Select the features to be used for training the model."""
     feature_columns = [
         "market_movement_H",
@@ -268,6 +270,10 @@ def select_features():
         "AwayTeam_fouls_conceded_last10_matches",
         "AwayTeam_points_last10_matches",
     ]
+    if not include_market:
+        feature_columns = [
+            c for c in feature_columns if not c.startswith("market_movement")
+        ]
     return feature_columns
 
 
@@ -278,7 +284,7 @@ def split_X_y(df: pd.DataFrame, feature_columns: list):
     return X, y
 
 
-def main(model_type):
+def main(model_type, include_market):
     """Main function to train and evaluate models."""
 
     if model_type == "Logistic Regression":
@@ -305,6 +311,7 @@ def main(model_type):
             brier_score_test_lr,
             accuracy_test_lr,
             model_type,
+            include_market,
         )
 
     elif model_type == "XGBoost Tuned":
@@ -317,7 +324,7 @@ def main(model_type):
             X_test_xgb,
             y_test_xgb,
             encoder,
-        ) = train_model_xgboost(df)
+        ) = train_model_xgboost(df, include_market)
         y_val_xgb_pred, y_test_xgb_pred = xgboost_model(
             X_train_xgb, y_train_xgb, X_val_xgb, X_test_xgb, BEST_XGB_PARAMS
         )
@@ -339,6 +346,7 @@ def main(model_type):
             brier_score_test_xgb,
             accuracy_test_xgb,
             model_type,
+            include_market,
         )
 
 
@@ -346,4 +354,7 @@ if __name__ == "__main__":
     ##model_type = "Logistic Regression";
     ##main(model_type)
     model_type = "XGBoost Tuned"
-    main(model_type)
+    include_market = (
+        True  # Set to True to include market movement features, False otherwise
+    )
+    main(model_type, include_market)
