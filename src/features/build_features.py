@@ -6,15 +6,23 @@ PROCESSED_DATA_DIR = PROJECT_ROOT / "data" / "processed"
 FEATURES_DATA_DIR = PROJECT_ROOT / "data" / "features"
 
 # ELO hyperparameters
-K = 20
+K = 8
 HOME_ADVANTAGE = 65
 INITIAL_ELO = 1500
-INITIAL_ELO_PROMOTED = 1450
-MEAN_REVERSION_FACTOR = 0.2
+INITIAL_ELO_PROMOTED = 1300
+MEAN_REVERSION_FACTOR = 0.0
 ELO_SCALE = 400
 
 
-def calculate_elo(df: pd.DataFrame) -> pd.DataFrame:
+def calculate_elo(
+    df: pd.DataFrame,
+    k=K,
+    home_advantage=HOME_ADVANTAGE,
+    initial_elo=INITIAL_ELO,
+    initial_elo_promoted=INITIAL_ELO_PROMOTED,
+    mean_reversion_factor=MEAN_REVERSION_FACTOR,
+    elo_scale=ELO_SCALE,
+) -> pd.DataFrame:
     """Calculate ELO ratings for each team updated match by match."""
 
     # Initialize ELO ratings for all teams
@@ -44,8 +52,8 @@ def calculate_elo(df: pd.DataFrame) -> pd.DataFrame:
             if current_season is not None:
                 for team in elo_ratings:
                     elo_ratings[team] = (
-                        elo_ratings[team] * (1 - MEAN_REVERSION_FACTOR)
-                        + INITIAL_ELO * MEAN_REVERSION_FACTOR
+                        elo_ratings[team] * (1 - mean_reversion_factor)
+                        + initial_elo * mean_reversion_factor
                     )
 
             current_season = season
@@ -58,9 +66,9 @@ def calculate_elo(df: pd.DataFrame) -> pd.DataFrame:
             if team not in initialized_this_season:
                 initialized_this_season.add(team)
                 if not previous_season_teams:
-                    elo_ratings[team] = INITIAL_ELO
+                    elo_ratings[team] = initial_elo
                 elif team not in previous_season_teams:
-                    elo_ratings[team] = INITIAL_ELO_PROMOTED
+                    elo_ratings[team] = initial_elo_promoted
 
         # Save the current ELO ratings before the match
         elo_home_rating = elo_ratings[home_team]
@@ -68,7 +76,7 @@ def calculate_elo(df: pd.DataFrame) -> pd.DataFrame:
 
         # Calculate expected scores based on ELO ratings and home advantage
         expected_home_score_win = 1 / (
-            1 + 10 ** ((elo_away_rating - elo_home_rating - HOME_ADVANTAGE) / ELO_SCALE)
+            1 + 10 ** ((elo_away_rating - elo_home_rating - home_advantage) / elo_scale)
         )
         expected_away_score_win = 1 - expected_home_score_win
 
@@ -86,8 +94,8 @@ def calculate_elo(df: pd.DataFrame) -> pd.DataFrame:
         actual_away_score = 1 - actual_home_score
 
         # Update ELO ratings based on the match result
-        elo_ratings[home_team] += K * (actual_home_score - expected_home_score_win)
-        elo_ratings[away_team] += K * (actual_away_score - expected_away_score_win)
+        elo_ratings[home_team] += k * (actual_home_score - expected_home_score_win)
+        elo_ratings[away_team] += k * (actual_away_score - expected_away_score_win)
 
     df["ELO_home"] = home_elos_list
     df["ELO_away"] = away_elos_list
