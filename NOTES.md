@@ -29,8 +29,15 @@
 - Differences between the tuned variants (0.9917-0.9958) are within noise.
 
 ## market_movement ablation
-- Without market: val 0.9921 vs 0.9917 with market. No measurable contribution.
-- Decision: exclude it (it also needs closing odds, only available minutes before kickoff).
+- Single val (2021/22-2022/23): 0.9921 without vs 0.9917 with market (0.0004, noise).
+- Walk-forward, 5 folds (2018/19-2022/23), diff = with market - without market:
+  -0.0018, -0.0021, -0.0019, +0.0018, -0.0019. Mean -0.0012,
+  paired bootstrap 95% CI (-0.0029, +0.0005). Crosses 0: not significant.
+- With market wins 4 of 5 folds by ~0.002, even though the params were tuned
+  WITHOUT market (which favors the no-market variant). Small, consistent but
+  statistically unclear signal. The 2021/22 reversal is most likely noise.
+- Decision: exclude it by design (needs closing odds, only available minutes before
+  kickoff), accepting a possible ~0.001 Log Loss cost. Not because it "adds nothing".
 
 ## ELO
 - Tuned with a one-feature logistic regression (ELO_diff) to avoid XGBoost noise.
@@ -45,6 +52,20 @@
 - With XGBoost the new ELO did NOT measurably improve results (it did with the
   one-feature regression).
 
+  ## Validation system
+- Walk-forward: 5 folds, train always the past (starting 2015/16, warmup excluded),
+  validate on the next season (2018/19 ... 2022/23). Test untouched.
+- Baseline (no market, tuned params): per-season Log Loss 1.0248, 1.0125, 0.9947,
+  0.9973, 0.9866 (mean 1.0032). Range across seasons ~0.038, so a single-season val
+  cannot detect improvements of 0.001-0.005.
+- Early folds are worse partly because of less training data and harder seasons;
+  the two can't be separated.
+- Paired bootstrap on per-match loss differences (2000 resamples, with replacement).
+  Verified with synthetic data (constant diff -0.1 -> CI (-0.1, -0.1)).
+- Decision rule for a new feature: wins in >= 4 of 5 folds, relevant mean gain,
+  bootstrap CI does not cross 0. Ties go to the simpler variant.
+  Caveat: with many ideas tested, some pass by chance; test stays the final check.
+
 ## Gap vs the market
 - Test: ~0.975 (model) vs ~0.954 (B365 closing): ~0.02.
 - Val has been used several times to choose parameters, so its numbers are optimistic.
@@ -58,10 +79,9 @@
 - download.py depends on today's date (it downloaded 2026/27): pin the last season.
 
 ## To do
-1. Walk-forward validation (5 folds) + paired bootstrap to measure real improvements.
-2. ELO with goal difference.
-3. Rolling windows: try removing windows, exponential weighting.
-4. Opponent strength, home/away split, matchday, no_crowd, end-of-season handicap.
-5. Refactor: read the CSV inside main (not at module level in train.py), shared season
+1. ELO with goal difference, measured with walk-forward + bootstrap.
+2. Rolling windows: try removing windows, exponential weighting.
+3. Opponent strength, home/away split, matchday, no_crowd, end-of-season handicap.
+4. Refactor: read the CSV inside main (not at module level in train.py), shared season
    lists in one module, propagate elo_params to build_features.
-6. Optuna + MLflow nested runs, FastAPI + Docker, Prefect, Streamlit.
+5. Optuna + MLflow nested runs, FastAPI + Docker, Prefect, Streamlit.
