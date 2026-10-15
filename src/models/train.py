@@ -13,22 +13,24 @@ FEATURES_FILE = FEATURES_DATA_DIR / "laliga_features.csv"
 
 
 BEST_XGB_PARAMS = {
-    "max_depth": 3,
-    "learning_rate": 0.004953362624397719,
-    "n_estimators": 604,
-    "min_child_weight": 1,
-    "subsample": 0.8423376718263298,
-    "colsample_bytree": 0.7784388337683795,
-    "reg_lambda": 44.45597758093505,
+    "max_depth": 2,
+    "learning_rate": 0.006590291555635154,
+    "n_estimators": 682,
+    "min_child_weight": 7,
+    "subsample": 0.7411526074732715,
+    "colsample_bytree": 0.6763680156694651,
+    "reg_lambda": 91.86403154740702,
 }
 
 df = pd.read_csv(FEATURES_FILE)
 
 
-def train_model_logistic_regression(df: pd.DataFrame):
+def train_model_logistic_regression(
+    df: pd.DataFrame, include_market, warmup_seasons=()
+):
     """Train a logistic regression model on the provided DataFrame."""
-    df_train, df_val, df_test = divide_df_train_val_test(df)
-    feature_columns = select_features()
+    df_train, df_val, df_test = divide_df_train_val_test(df, warmup_seasons)
+    feature_columns = select_features(include_market)
 
     print(f"Train: {len(df_train)}, Val: {len(df_val)}, Test: {len(df_test)}")
     # print(df.columns.tolist())
@@ -53,9 +55,9 @@ def train_model_logistic_regression(df: pd.DataFrame):
     return X_train_scaled, y_train, X_val_scaled, y_val, X_test_scaled, y_test
 
 
-def train_model_xgboost(df: pd.DataFrame, include_market):
+def train_model_xgboost(df: pd.DataFrame, include_market, warmup_seasons=()):
     """Train a XGBoost model on the provided DataFrame."""
-    df_train, df_val, df_test = divide_df_train_val_test(df)
+    df_train, df_val, df_test = divide_df_train_val_test(df, warmup_seasons)
     feature_columns = select_features(include_market)
 
     print(f"Train: {len(df_train)}, Val: {len(df_val)}, Test: {len(df_test)}")
@@ -153,11 +155,13 @@ def save_metrics_to_mlflow(
     accuracy_test,
     model_type,
     include_market,
+    warmup_seasons=(),
 ):
     with mlflow.start_run():
         """Save the evaluation metrics to MLflow."""
         mlflow.log_param("model_type", model_type)
         mlflow.log_param("include_market", include_market)
+        mlflow.log_param("warmup_seasons", str(warmup_seasons))
         mlflow.log_metric("log_loss_val", log_loss_val)
         mlflow.log_metric("brier_score_val", brier_score_val)
         mlflow.log_metric("accuracy_val", accuracy_val)
@@ -166,7 +170,7 @@ def save_metrics_to_mlflow(
         mlflow.log_metric("accuracy_test", accuracy_test)
 
 
-def divide_df_train_val_test(df: pd.DataFrame):
+def divide_df_train_val_test(df: pd.DataFrame, warmup_seasons=()):
     """Divide the DataFrame into train, validation, and test sets based on seasons."""
     train_seasons = [
         "2013/14",
@@ -180,6 +184,8 @@ def divide_df_train_val_test(df: pd.DataFrame):
     ]
     val_seasons = ["2021/22", "2022/23"]
     test_seasons = ["2023/24", "2024/25", "2025/26"]
+
+    train_seasons = [s for s in train_seasons if s not in warmup_seasons]
 
     df_train = df[df["Season"].isin(train_seasons)]
     df_val = df[df["Season"].isin(val_seasons)]
@@ -284,7 +290,7 @@ def split_X_y(df: pd.DataFrame, feature_columns: list):
     return X, y
 
 
-def main(model_type, include_market):
+def main(model_type, include_market, warmup_seasons=()):
     """Main function to train and evaluate models."""
 
     if model_type == "Logistic Regression":
@@ -312,6 +318,7 @@ def main(model_type, include_market):
             accuracy_test_lr,
             model_type,
             include_market,
+            warmup_seasons,
         )
 
     elif model_type == "XGBoost Tuned":
@@ -324,7 +331,7 @@ def main(model_type, include_market):
             X_test_xgb,
             y_test_xgb,
             encoder,
-        ) = train_model_xgboost(df, include_market)
+        ) = train_model_xgboost(df, include_market, warmup_seasons)
         y_val_xgb_pred, y_test_xgb_pred = xgboost_model(
             X_train_xgb, y_train_xgb, X_val_xgb, X_test_xgb, BEST_XGB_PARAMS
         )
@@ -347,6 +354,7 @@ def main(model_type, include_market):
             accuracy_test_xgb,
             model_type,
             include_market,
+            warmup_seasons,
         )
 
 
@@ -355,6 +363,7 @@ if __name__ == "__main__":
     ##main(model_type)
     model_type = "XGBoost Tuned"
     include_market = (
-        True  # Set to True to include market movement features, False otherwise
+        False  # Set to True to include market movement features, False otherwise
     )
-    main(model_type, include_market)
+    for warmup in [(), ("2013/14", "2014/15")]:
+        main(model_type, include_market, warmup_seasons=warmup)

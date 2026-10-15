@@ -4,7 +4,7 @@ from sklearn.metrics import log_loss
 from xgboost import XGBClassifier
 
 X_train, y_train_encoded, X_val, y_val_encoded, X_test, y_test_encoded, encoder = (
-    train_model_xgboost(df)
+    train_model_xgboost(df, include_market=False, warmup_seasons=("2013/14", "2014/15"))
 )
 
 
@@ -17,7 +17,7 @@ def objective(trial):
         "min_child_weight": trial.suggest_int("min_child_weight", 1, 20),
         "subsample": trial.suggest_float("subsample", 0.5, 1.0),
         "colsample_bytree": trial.suggest_float("colsample_bytree", 0.3, 1.0),
-        "reg_lambda": trial.suggest_float("reg_lambda", 0.01, 50, log=True),
+        "reg_lambda": trial.suggest_float("reg_lambda", 0.01, 100, log=True),
     }
 
     # Create and train the XGBoost model
