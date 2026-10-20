@@ -51,6 +51,20 @@
   Warmup: 2013/14 and 2014/15 are used to compute ELO but not for training.
 - With XGBoost the new ELO did NOT measurably improve results (it did with the
   one-feature regression).
+- Margin of victory (multiplier on k, normalized by its mean over train so the
+  average k is unchanged). 9 shapes tested: none, linear, logarithmic, square_root,
+  world_football_elo, harmonic, harmonic_plus_one, saturated, capped.
+  Val log loss (one-feature logistic regression, k=8): none 0.9957, all others
+  0.9958-0.9968. Grid over k in {2,...,16}: best per variant 0.9956 (none) to 0.9967
+  (linear). No variant beats "none" (differences < 0.002, i.e. noise).
+- Conclusion: with this method, goal difference in the ELO adds nothing measurable.
+  Default stays "none"; the code is kept. Likely reasons (hypotheses): goals are
+  noisy, k is already low, and a multiplier is a patch (a real fix would model the
+  expected goal margin, e.g. Poisson / Dixon-Coles).
+- Normalization scales on train (mean G): none 1.00, saturated 1.21, square_root 1.22,
+  world_football_elo 1.23, harmonic 1.25, logarithmic 1.33, capped 1.51,
+  linear 1.60, harmonic_plus_one 1.99. Without normalizing, harmonic_plus_one would
+  have doubled the effective k.
 
   ## Validation system
 - Walk-forward: 5 folds, train always the past (starting 2015/16, warmup excluded),
@@ -77,11 +91,16 @@
   ln(3) = 1.0986 is impossible for a bookmaker.
 - EDA baselines mixed train+val+test: not comparable with test.
 - download.py depends on today's date (it downloaded 2026/27): pin the last season.
+- My a-priori estimates (e.g. mean margin scales, expected gain from goal margin) were
+  wrong; measure instead of guessing.
+- A feature like goal_diff = FTHG - FTAG exists only after the match: using it as input
+  is leakage. Past goal difference must come via rolling features or the ELO update.
 
 ## To do
-1. ELO with goal difference, measured with walk-forward + bootstrap.
-2. Rolling windows: try removing windows, exponential weighting.
-3. Opponent strength, home/away split, matchday, no_crowd, end-of-season handicap.
-4. Refactor: read the CSV inside main (not at module level in train.py), shared season
+1. Cheap ideas, each measured with walk-forward + paired bootstrap: fewer rolling
+   windows, matchday, no_crowd, home/away rolling. Then freeze the feature set.
+2. Opponent strength, home/away split, matchday, no_crowd, end-of-season handicap.
+3. Refactor: read the CSV inside main (not at module level in train.py), shared season
    lists in one module, propagate elo_params to build_features.
-5. Optuna + MLflow nested runs, FastAPI + Docker, Prefect, Streamlit.
+4. Optuna + MLflow nested runs, FastAPI + Docker, Prefect, Streamlit.
+5. goals model (Poisson / Dixon-Coles), opponent strength, end-of-season handicap.

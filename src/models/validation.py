@@ -65,23 +65,49 @@ def paired_bootstrap(losses_a, losses_b, n_boot=2000, seed=42):
     return diff_mean, (ci_low, ci_high)
 
 
-if __name__ == "__main__":
-    feature_columns_a = select_features(include_market=True)
-    feature_columns_b = select_features(include_market=False)
-    losses_a_per_fold = walk_forward_losses(
-        df, feature_columns_a, BEST_XGB_PARAMS, FOLDS
-    )
-    losses_b_per_fold = walk_forward_losses(
-        df, feature_columns_b, BEST_XGB_PARAMS, FOLDS
-    )
+def compare_feature_sets(
+    df, feature_columns_a, feature_columns_b, params, folds, name_a="A", name_b="B"
+):
+    """Compare two feature sets with walk-forward validation and a paired bootstrap.
+
+    diff = loss(A) - loss(B). Negative: A is better. Positive: B is better.
+    """
+    losses_a_per_fold = walk_forward_losses(df, feature_columns_a, params, folds)
+    losses_b_per_fold = walk_forward_losses(df, feature_columns_b, params, folds)
+
+    wins_b = 0
     for (_, val_season), losses_a, losses_b in zip(
-        FOLDS, losses_a_per_fold, losses_b_per_fold
+        folds, losses_a_per_fold, losses_b_per_fold
     ):
+        diff = (
+            losses_a.mean() - losses_b.mean()
+        )  # mean of A minus mean of B for this season
+        if diff > 0:  # when does B win this fold?
+            wins_b += 1
         print(
             val_season,
-            f"A={losses_a.mean():.4f}",
-            f"B={losses_b.mean():.4f}",
-            f"diff={losses_a.mean() - losses_b.mean():+.4f}",
+            f"{name_a}={losses_a.mean():.4f}",
+            f"{name_b}={losses_b.mean():.4f}",
+            f"diff={diff:+.4f}",
         )
+
+    # 3. Bootstrap on all matches together
     diff_mean, ci = paired_bootstrap(losses_a_per_fold, losses_b_per_fold)
-    print(f"Paired bootstrap: {diff_mean:.4f} ({ci[0]:.4f}, {ci[1]:.4f})")
+    print(f"Paired bootstrap: {diff_mean:+.4f} ({ci[0]:+.4f}, {ci[1]:+.4f})")
+    print(f"{name_b} better in {wins_b}/{len(folds)} folds")
+    adopt = wins_b >= 4 and ci[0] > 0
+    print(f"Verdict: {'ADOPT ' + name_b if adopt else 'do NOT adopt ' + name_b}")
+
+    return diff_mean, ci, wins_b
+
+
+if __name__ == "__main__":
+    compare_feature_sets(
+        df,
+        select_features(include_market=True),
+        select_features(include_market=False),
+        BEST_XGB_PARAMS,
+        FOLDS,
+        name_a="A (market)",
+        name_b="B (no market)",
+    )

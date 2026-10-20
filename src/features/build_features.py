@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import pathlib
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -14,6 +15,68 @@ MEAN_REVERSION_FACTOR = 0.0
 ELO_SCALE = 400
 
 
+def margin_of_victory_multiplier(
+    home_goals: int, away_goals: int, math_function: str
+) -> float:
+    """Calculate the margin of victory multiplier based on the goal difference."""
+
+    goal_difference = abs(home_goals - away_goals)
+
+    if math_function == "none":
+        return 1.0
+    elif math_function == "linear":
+        return float(max(goal_difference, 1))
+    elif math_function == "logarithmic":
+        if goal_difference == 0:
+            return 1.0
+        else:
+            return float(1 + np.log(goal_difference))
+    elif math_function == "square_root":
+        if goal_difference == 0:
+            return 1.0
+        else:
+            return float(np.sqrt(goal_difference))
+    elif math_function == "world_football_elo":
+        if goal_difference <= 1:
+            return 1.0
+        elif goal_difference == 2:
+            return 1.5
+        else:
+            return float((11 + goal_difference) / 8)
+    elif math_function == "harmonic":
+        if goal_difference == 0:
+            return 1.0
+        else:
+            return float(sum(1 / i for i in range(1, goal_difference + 1)))
+    elif math_function == "harmonic_plus_one":
+        return float(
+            1 + sum(1 / i for i in range(1, goal_difference + 1))
+        )  # Considered goal_difference=0 returns 1.0
+    elif math_function == "saturated":
+        if goal_difference == 0:
+            return 1.0
+        else:
+            return float(1 + (goal_difference - 1) / (goal_difference))
+    elif math_function == "capped":
+        return float(max(min(goal_difference, 3), 1))
+    else:
+        raise ValueError(f"Unknown math_function: {math_function}")
+
+
+def compute_margin_scale_factor(df_matches: pd.DataFrame, math_function: str) -> float:
+    """Mean multiplier over the given matches (used to keep the average k unchanged)."""
+    home_goals = df_matches["FTHG"]
+    away_goals = df_matches["FTAG"]
+    return float(
+        np.mean(
+            [
+                margin_of_victory_multiplier(h, a, math_function)
+                for h, a in zip(home_goals, away_goals)
+            ]
+        )
+    )
+
+
 def calculate_elo(
     df: pd.DataFrame,
     k=K,
@@ -22,6 +85,8 @@ def calculate_elo(
     initial_elo_promoted=INITIAL_ELO_PROMOTED,
     mean_reversion_factor=MEAN_REVERSION_FACTOR,
     elo_scale=ELO_SCALE,
+    margin_function="none",
+    margin_scale=1.0,
 ) -> pd.DataFrame:
     """Calculate ELO ratings for each team updated match by match."""
 
@@ -94,8 +159,12 @@ def calculate_elo(
         actual_away_score = 1 - actual_home_score
 
         # Update ELO ratings based on the match result
-        elo_ratings[home_team] += k * (actual_home_score - expected_home_score_win)
-        elo_ratings[away_team] += k * (actual_away_score - expected_away_score_win)
+        g = (
+            margin_of_victory_multiplier(row["FTHG"], row["FTAG"], margin_function)
+            / margin_scale
+        )
+        elo_ratings[home_team] += k * g * (actual_home_score - expected_home_score_win)
+        elo_ratings[away_team] += k * g * (actual_away_score - expected_away_score_win)
 
     df["ELO_home"] = home_elos_list
     df["ELO_away"] = away_elos_list
