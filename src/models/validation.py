@@ -107,8 +107,7 @@ def compare_feature_sets(
 
 
 if __name__ == "__main__":
-    base = select_features(include_market=False, include_crowd=False)
-    print(len(base), len(set(base)), "crowd_fraction" in base)
+    base = select_features(include_market=False)
     compare_feature_sets(
         df,
         base,
@@ -116,5 +115,5 @@ if __name__ == "__main__":
         BEST_XGB_PARAMS,
         FOLDS,
         name_a="base",
-        name_b="base+crowd",
+        name_b="candidate",
     )

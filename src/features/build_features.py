@@ -316,6 +316,21 @@ def calculate_rolling_features(
     return team_df
 
 
+def add_venue_features(team_df: pd.DataFrame, min_matches: int = 3) -> pd.DataFrame:
+    """Points per game in previous matches played in the same venue (home or away).
+
+    NaN until the team has played at least `min_matches` previous matches of that type.
+    """
+    group = team_df.groupby(["team", "Season", "is_home"])
+
+    previous_points = group["points"].cumsum() - team_df["points"]
+    previous_matches = group.cumcount()  # previous matches of the same venue type
+
+    ppg = previous_points / previous_matches.replace(0, np.nan)
+    team_df["venue_ppg"] = ppg.where(previous_matches >= min_matches)
+    return team_df
+
+
 def merge_rolling_features(
     df_with_elo: pd.DataFrame, team_df_with_rolling_features: pd.DataFrame
 ) -> pd.DataFrame:
@@ -326,6 +341,7 @@ def merge_rolling_features(
         "points_remaining",
         "dist_europe",
         "dist_relegation",
+        "venue_ppg",
     ]
 
     # Rename rolling feature columns to distinguish between home and away teams
@@ -380,9 +396,14 @@ def build_elo_and_rolling_features(df: pd.DataFrame) -> pd.DataFrame:
         team_df_with_rolling_features
     )
 
+    # Add venue features
+    team_df_with_rolling_standings_and_venue_features = add_venue_features(
+        team_df_with_rolling_and_standings_features
+    )
+
     # Merge the rolling features back to the original DataFrame
     final_df = merge_rolling_features(
-        df_with_elo, team_df_with_rolling_and_standings_features
+        df_with_elo, team_df_with_rolling_standings_and_venue_features
     )
 
     # Approximate stadium capacity (COVID)

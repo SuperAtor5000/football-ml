@@ -109,6 +109,13 @@
 - Walk-forward: diff -0.0000, CI (-0.0004, +0.0004), better in 3/5 folds. Not adopted.
 - Kept in the CSV, excluded by default (select_features include_crowd=False).
 
+## Venue form (not adopted)
+- venue_ppg: points per game in previous matches of the same venue type (home for the
+  home team, away for the away team), NaN until 3 such matches (15.8% NaN).
+- Walk-forward: diff +0.0000, CI (-0.0009, +0.0010), better in 3/5 folds. Not adopted.
+- Likely already captured by ELO + standings + rolling form.
+- Code kept in build_features.py (add_venue_features); excluded from select_features.
+
 ## Gap vs the market
 - Test: ~0.974 (model) vs ~0.954 (B365 closing): ~0.02.
 - Val has been used several times to choose parameters, so its numbers are optimistic.
@@ -130,12 +137,11 @@
   compare_feature_sets now checks for duplicates.
 
 ## To do
-1. Home/away rolling features (venue-specific form), measured with walk-forward.
-2. Try fewer rolling windows (keep 1-2 of 3/5/7/10), exponential weighting.
-3. Freeze the feature set, then retune XGBoost once and report test once.
-4. Refactor: read the CSV inside main (not at module level in train.py), shared season
+1. Try fewer rolling windows (keep 1-2 of 3/5/7/10), exponential weighting.
+2. Freeze the feature set, then retune XGBoost once and report test once.
+3. Refactor: read the CSV inside main (not at module level in train.py), shared season
    lists in one module, propagate elo_params to build_features, train.py main block
    running only the final config.
-5. Optuna + MLflow nested runs, FastAPI + Docker, Prefect, Streamlit.
-6. Later layer: goals model (Poisson / Dixon-Coles), opponent strength, end-of-season
+4. Optuna + MLflow nested runs, FastAPI + Docker, Prefect, Streamlit.
+5. Later layer: goals model (Poisson / Dixon-Coles), opponent strength, end-of-season
    handicap, DVC/.gitignore fix for features file.
