@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import pathlib
 import mlflow
+import mlflow.xgboost
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.metrics import log_loss, brier_score_loss
@@ -127,7 +128,7 @@ def xgboost_model(X_train, y_train, X_val, X_test, params):
     print(f"        Validation Shape: {y_val_xgb_pred.shape}")
     print(f"        Test Shape: {y_test_xgb_pred.shape}")
 
-    return y_val_xgb_pred, y_test_xgb_pred
+    return xgb_model, y_val_xgb_pred, y_test_xgb_pred
 
 
 def evaluate_model(y_true, y_pred):
@@ -157,6 +158,7 @@ def evaluate_model(y_true, y_pred):
 
 
 def save_metrics_to_mlflow(
+    model,
     log_loss_val,
     brier_score_val,
     accuracy_val,
@@ -164,14 +166,22 @@ def save_metrics_to_mlflow(
     brier_score_test,
     accuracy_test,
     model_type,
+    params,
+    feature_columns,
+    classes,
     include_market,
     warmup_seasons=(),
 ):
+    mlflow.set_experiment("laliga-1X2-prediction")
     with mlflow.start_run():
         """Save the evaluation metrics to MLflow."""
+        mlflow.xgboost.log_model(model, "model")
         mlflow.log_param("model_type", model_type)
+        mlflow.log_params(params)
         mlflow.log_param("include_market", include_market)
         mlflow.log_param("warmup_seasons", str(warmup_seasons))
+        mlflow.log_dict({"features": list(feature_columns)}, "features.json")
+        mlflow.log_dict({"classes": [str(c) for c in classes]}, "classes.json")
         mlflow.log_metric("log_loss_val", log_loss_val)
         mlflow.log_metric("brier_score_val", brier_score_val)
         mlflow.log_metric("accuracy_val", accuracy_val)
@@ -324,6 +334,7 @@ def main(model_type, include_market, warmup_seasons=()):
             y_test_lr, y_test_lr_pred
         )
         save_metrics_to_mlflow(
+            None,
             log_loss_val_lr,
             brier_score_val_lr,
             accuracy_val_lr,
@@ -331,6 +342,9 @@ def main(model_type, include_market, warmup_seasons=()):
             brier_score_test_lr,
             accuracy_test_lr,
             model_type,
+            {},
+            select_features(include_market),
+            lr_classes,
             include_market,
             warmup_seasons,
         )
@@ -346,7 +360,7 @@ def main(model_type, include_market, warmup_seasons=()):
             y_test_xgb,
             encoder,
         ) = train_model_xgboost(df, include_market, warmup_seasons)
-        y_val_xgb_pred, y_test_xgb_pred = xgboost_model(
+        xgb_model, y_val_xgb_pred, y_test_xgb_pred = xgboost_model(
             X_train_xgb, y_train_xgb, X_val_xgb, X_test_xgb, BEST_XGB_PARAMS
         )
         y_val_xgb_decoded = encoder.inverse_transform(y_val_xgb)
@@ -360,6 +374,7 @@ def main(model_type, include_market, warmup_seasons=()):
             y_test_xgb_decoded, y_test_xgb_pred
         )
         save_metrics_to_mlflow(
+            xgb_model,
             log_loss_val_xgb,
             brier_score_val_xgb,
             accuracy_val_xgb,
@@ -367,6 +382,9 @@ def main(model_type, include_market, warmup_seasons=()):
             brier_score_test_xgb,
             accuracy_test_xgb,
             model_type,
+            BEST_XGB_PARAMS,
+            select_features(include_market),
+            encoder.classes_,
             include_market,
             warmup_seasons,
         )
