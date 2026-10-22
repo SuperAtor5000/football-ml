@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBClassifier
 
-from src.models.train import BEST_XGB_PARAMS, df, select_features
+from src.models.train import BEST_XGB_PARAMS, STANDINGS_FEATURES, df, select_features
 
 # Each fold: (training seasons, validation season)
 SEASONS = [
@@ -102,12 +102,33 @@ def compare_feature_sets(
 
 
 if __name__ == "__main__":
-    compare_feature_sets(
-        df,
-        select_features(include_market=True),
-        select_features(include_market=False),
-        BEST_XGB_PARAMS,
-        FOLDS,
-        name_a="A (market)",
-        name_b="B (no market)",
-    )
+    base = select_features(include_market=False, include_standings=False)
+
+    def cols(*names):
+        return [f"{side}_{n}" for side in ["HomeTeam", "AwayTeam"] for n in names]
+
+    variants = {
+        "acc_only": cols("points_accumulated_before_match"),
+        "acc+dist": cols(
+            "points_accumulated_before_match", "dist_europe", "dist_relegation"
+        ),
+        "remaining_only": cols("points_remaining"),
+        "all8": STANDINGS_FEATURES,
+        "acc+dist+remaining": cols(
+            "points_accumulated_before_match",
+            "dist_europe",
+            "dist_relegation",
+            "points_remaining",
+        ),
+    }
+    for name, extra in variants.items():
+        print(f"\n=== {name} ===")
+        compare_feature_sets(
+            df,
+            base,
+            base + extra,
+            BEST_XGB_PARAMS,
+            FOLDS,
+            name_a="base",
+            name_b=name,
+        )

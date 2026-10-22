@@ -14,13 +14,23 @@ FEATURES_FILE = FEATURES_DATA_DIR / "laliga_features.csv"
 
 BEST_XGB_PARAMS = {
     "max_depth": 2,
-    "learning_rate": 0.006590291555635154,
-    "n_estimators": 682,
-    "min_child_weight": 7,
-    "subsample": 0.7411526074732715,
-    "colsample_bytree": 0.6763680156694651,
-    "reg_lambda": 91.86403154740702,
+    "learning_rate": 0.005861421069352081,
+    "n_estimators": 793,
+    "min_child_weight": 8,
+    "subsample": 0.9722666745444034,
+    "colsample_bytree": 0.4830901143831626,
+    "reg_lambda": 92.56287040362311,
 }
+
+STANDINGS_FEATURES = [
+    f"{side}_{name}"
+    for side in ["HomeTeam", "AwayTeam"]
+    for name in [
+        "points_accumulated_before_match",
+        "dist_europe",
+        "dist_relegation",
+    ]
+]
 
 df = pd.read_csv(FEATURES_FILE)
 
@@ -194,7 +204,7 @@ def divide_df_train_val_test(df: pd.DataFrame, warmup_seasons=()):
     return df_train, df_val, df_test
 
 
-def select_features(include_market=True):
+def select_features(include_market=True, include_standings=True):
     """Select the features to be used for training the model."""
     feature_columns = [
         "market_movement_H",
@@ -280,6 +290,8 @@ def select_features(include_market=True):
         feature_columns = [
             c for c in feature_columns if not c.startswith("market_movement")
         ]
+    if include_standings:
+        feature_columns = feature_columns + STANDINGS_FEATURES
     return feature_columns
 
 

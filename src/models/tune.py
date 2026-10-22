@@ -1,4 +1,4 @@
-from train import train_model_xgboost, df
+from src.models.train import train_model_xgboost, df
 import optuna
 from sklearn.metrics import log_loss
 from xgboost import XGBClassifier
