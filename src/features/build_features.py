@@ -14,6 +14,13 @@ INITIAL_ELO_PROMOTED = 1300
 MEAN_REVERSION_FACTOR = 0.0
 ELO_SCALE = 400
 
+CROWD_PERIODS = [
+    ("2020-03-12", "2021-05-13", 0.0),
+    ("2021-05-14", "2021-07-31", 0.3),
+    ("2021-08-01", "2021-08-31", 0.4),
+    ("2021-09-01", "2021-09-30", 0.6),
+]
+
 
 def margin_of_victory_multiplier(
     home_goals: int, away_goals: int, math_function: str
@@ -272,6 +279,15 @@ def compute_threshold_points(team_df: pd.DataFrame) -> pd.DataFrame:
     return pd.concat(rows, ignore_index=True)
 
 
+def add_no_crowd(df: pd.DataFrame) -> pd.DataFrame:
+    """Approximate stadium capacity allowed (0 = closed doors, 1 = full)."""
+    df["crowd_fraction"] = 1.0
+    for start, end, fraction in CROWD_PERIODS:
+        mask = (df["Date"] >= start) & (df["Date"] <= end)
+        df.loc[mask, "crowd_fraction"] = fraction
+    return df
+
+
 def calculate_rolling_features(
     team_df: pd.DataFrame, windows_matches: list[int] = [3, 5, 7, 10]
 ) -> pd.DataFrame:
@@ -368,6 +384,9 @@ def build_elo_and_rolling_features(df: pd.DataFrame) -> pd.DataFrame:
     final_df = merge_rolling_features(
         df_with_elo, team_df_with_rolling_and_standings_features
     )
+
+    # Approximate stadium capacity (COVID)
+    final_df = add_no_crowd(final_df)
 
     return final_df
 

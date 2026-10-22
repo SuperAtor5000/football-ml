@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBClassifier
 
-from src.models.train import BEST_XGB_PARAMS, STANDINGS_FEATURES, df, select_features
+from src.models.train import BEST_XGB_PARAMS, df, select_features
 
 # Each fold: (training seasons, validation season)
 SEASONS = [
@@ -72,6 +72,11 @@ def compare_feature_sets(
 
     diff = loss(A) - loss(B). Negative: A is better. Positive: B is better.
     """
+    if len(feature_columns_a) != len(set(feature_columns_a)):
+        raise ValueError("Duplicate feature columns")
+    if len(feature_columns_b) != len(set(feature_columns_b)):
+        raise ValueError("Duplicate feature columns")
+
     losses_a_per_fold = walk_forward_losses(df, feature_columns_a, params, folds)
     losses_b_per_fold = walk_forward_losses(df, feature_columns_b, params, folds)
 
@@ -102,33 +107,14 @@ def compare_feature_sets(
 
 
 if __name__ == "__main__":
-    base = select_features(include_market=False, include_standings=False)
-
-    def cols(*names):
-        return [f"{side}_{n}" for side in ["HomeTeam", "AwayTeam"] for n in names]
-
-    variants = {
-        "acc_only": cols("points_accumulated_before_match"),
-        "acc+dist": cols(
-            "points_accumulated_before_match", "dist_europe", "dist_relegation"
-        ),
-        "remaining_only": cols("points_remaining"),
-        "all8": STANDINGS_FEATURES,
-        "acc+dist+remaining": cols(
-            "points_accumulated_before_match",
-            "dist_europe",
-            "dist_relegation",
-            "points_remaining",
-        ),
-    }
-    for name, extra in variants.items():
-        print(f"\n=== {name} ===")
-        compare_feature_sets(
-            df,
-            base,
-            base + extra,
-            BEST_XGB_PARAMS,
-            FOLDS,
-            name_a="base",
-            name_b=name,
-        )
+    base = select_features(include_market=False, include_crowd=False)
+    print(len(base), len(set(base)), "crowd_fraction" in base)
+    compare_feature_sets(
+        df,
+        base,
+        base + ["crowd_fraction"],
+        BEST_XGB_PARAMS,
+        FOLDS,
+        name_a="base",
+        name_b="base+crowd",
+    )

@@ -204,7 +204,7 @@ def divide_df_train_val_test(df: pd.DataFrame, warmup_seasons=()):
     return df_train, df_val, df_test
 
 
-def select_features(include_market=True, include_standings=True):
+def select_features(include_market=True, include_standings=True, include_crowd=False):
     """Select the features to be used for training the model."""
     feature_columns = [
         "market_movement_H",
@@ -292,6 +292,8 @@ def select_features(include_market=True, include_standings=True):
         ]
     if include_standings:
         feature_columns = feature_columns + STANDINGS_FEATURES
+    if include_crowd:
+        feature_columns = feature_columns + ["crowd_fraction"]
     return feature_columns
 
 
@@ -371,11 +373,4 @@ def main(model_type, include_market, warmup_seasons=()):
 
 
 if __name__ == "__main__":
-    ##model_type = "Logistic Regression";
-    ##main(model_type)
-    model_type = "XGBoost Tuned"
-    include_market = (
-        False  # Set to True to include market movement features, False otherwise
-    )
-    for warmup in [(), ("2013/14", "2014/15")]:
-        main(model_type, include_market, warmup_seasons=warmup)
+    main("XGBoost Tuned", include_market=False, warmup_seasons=("2013/14", "2014/15"))
