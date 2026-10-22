@@ -227,6 +227,51 @@ def build_team_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     return team_df
 
 
+def add_standings_features(team_df: pd.DataFrame) -> pd.DataFrame:
+    """Add pre-match standings features (points, distance to Europe/relegation)."""
+    team_df["points_accumulated_before_match"] = (
+        team_df.groupby(["team", "Season"])["points"].cumsum() - team_df["points"]
+    )
+    team_df["points_remaining"] = (
+        38 - (team_df["matchday"] - 1)
+    ) * 3  # Assuming 38 matches in a season
+
+    thresholds = compute_threshold_points(team_df)
+    team_df = team_df.merge(thresholds, on=["Date", "Season"], how="left")
+    team_df["dist_europe"] = (
+        team_df["points_accumulated_before_match"] - team_df["points_7th"]
+    )
+    team_df["dist_relegation"] = (
+        team_df["points_accumulated_before_match"] - team_df["points_18th"]
+    )
+
+    return team_df.drop(columns=["points_7th", "points_18th"])
+
+
+def compute_threshold_points(team_df: pd.DataFrame) -> pd.DataFrame:
+    """Points of the 7th and 18th team before each date, per season."""
+    df = team_df.copy()
+    df["points_cum"] = df.groupby(["team", "Season"])["points"].cumsum()
+
+    rows = []
+    for season, df_season in df.groupby("Season"):
+        table = df_season.pivot(index="Date", columns="team", values="points_cum")
+        table = table.ffill().fillna(0)  # teams that haven't played yet have 0 points
+        table = table.shift(1)
+        table = table.fillna(0)
+        sorted_points = -np.sort(-table.values, axis=1)  # each row sorted high -> low
+        out = pd.DataFrame(
+            {
+                "Date": table.index,
+                "Season": season,
+                "points_7th": sorted_points[:, 6],
+                "points_18th": sorted_points[:, 17],
+            }
+        )
+        rows.append(out)
+    return pd.concat(rows, ignore_index=True)
+
+
 def calculate_rolling_features(
     team_df: pd.DataFrame, windows_matches: list[int] = [3, 5, 7, 10]
 ) -> pd.DataFrame:
@@ -260,19 +305,26 @@ def merge_rolling_features(
 ) -> pd.DataFrame:
     """Merge rolling features back to the original DataFrame."""
 
-    # Columnas rolling que quieres renombrar
+    standings_cols = [
+        "points_accumulated_before_match",
+        "points_remaining",
+        "dist_europe",
+        "dist_relegation",
+    ]
+
+    # Rename rolling feature columns to distinguish between home and away teams
     rolling_cols = [
         c
         for c in team_df_with_rolling_features.columns
-        if "_last" in c or c == "matchday"
+        if "_last" in c or c == "matchday" or c in standings_cols
     ]
 
-    # Versión para equipo local
+    # Version for home team
     home_df = team_df_with_rolling_features[
         ["Date", "Season", "team"] + rolling_cols
     ].rename(columns={col: f"HomeTeam_{col}" for col in rolling_cols})
 
-    # Versión para equipo visitante
+    # Version for away team
     away_df = team_df_with_rolling_features[
         ["Date", "Season", "team"] + rolling_cols
     ].rename(columns={col: f"AwayTeam_{col}" for col in rolling_cols})
@@ -307,8 +359,15 @@ def build_elo_and_rolling_features(df: pd.DataFrame) -> pd.DataFrame:
     # Calculate rolling features
     team_df_with_rolling_features = calculate_rolling_features(team_df)
 
+    # Add standings features (points before match, distance to Europe/relegation)
+    team_df_with_rolling_and_standings_features = add_standings_features(
+        team_df_with_rolling_features
+    )
+
     # Merge the rolling features back to the original DataFrame
-    final_df = merge_rolling_features(df_with_elo, team_df_with_rolling_features)
+    final_df = merge_rolling_features(
+        df_with_elo, team_df_with_rolling_and_standings_features
+    )
 
     return final_df
 
