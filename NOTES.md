@@ -66,6 +66,22 @@
   linear 1.60, harmonic_plus_one 1.99. Without normalizing, harmonic_plus_one would
   have doubled the effective k.
 
+  ## Standings features
+- Added per team (home/away): points accumulated before the match, distance in points
+  to the 7th place (Europe) and to the 18th place (relegation). Computed per date, only
+  from previous matches. No tie-breaks needed (only points matter).
+- Leakage audit: mutation test (changing a match result does not change that match's
+  features) passed.
+- Walk-forward ablation (diff = base - variant, positive = variant better):
+  acc_only +0.0011 (CI -0.0003, +0.0023), acc+dist +0.0019 (CI +0.0001, +0.0038),
+  remaining_only +0.0007, all8 +0.0023 (CI +0.0003, +0.0042).
+- Decision: adopt acc+dist (6 columns). points_remaining adds ~0.0004 (noise).
+- Caveats: CI barely excludes 0; 2022/23 goes against in most variants; several
+  comparisons on the same folds.
+- Model seed (random_state) moves Optuna's best val log loss by ~0.001, the same size
+  as the improvements measured. Pending: repeat walk-forward with 3 seeds.
+- Retuned XGBoost val log loss: 0.9934 (same as before, within noise).
+
   ## Validation system
 - Walk-forward: 5 folds, train always the past (starting 2015/16, warmup excluded),
   validate on the next season (2018/19 ... 2022/23). Test untouched.
