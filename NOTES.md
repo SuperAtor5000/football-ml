@@ -21,12 +21,14 @@
 | Logistic regression, old ELO, with market | 1.0192 | 0.9857 |
 | XGBoost, default params | 1.2773 | 1.1978 |
 | XGBoost tuned, old ELO, with market | 0.9917 | 0.9714 |
-| XGBoost tuned, new ELO, no market, with warmup (final) | 0.9934 | 0.9750 |
+| XGBoost tuned, new ELO, no market, with warmup | 0.9934 | 0.9750 |
+| XGBoost tuned, + standings features (current) | 0.9934 | 0.9739 |
 
 - Default XGBoost overfits (3040 rows, ~75 features); Optuna fixes it.
 - Good region: max_depth 2-3, strong regularization (reg_lambda ~50-100),
   learning_rate x n_estimators ~ 2-3.
-- Differences between the tuned variants (0.9917-0.9958) are within noise.
+- Differences between the tuned variants (0.9917-0.9958 on val) are within noise.
+- Test numbers are only reported, never used to decide.
 
 ## market_movement ablation
 - Single val (2021/22-2022/23): 0.9921 without vs 0.9917 with market (0.0004, noise).
@@ -51,38 +53,23 @@
   Warmup: 2013/14 and 2014/15 are used to compute ELO but not for training.
 - With XGBoost the new ELO did NOT measurably improve results (it did with the
   one-feature regression).
-- Margin of victory (multiplier on k, normalized by its mean over train so the
-  average k is unchanged). 9 shapes tested: none, linear, logarithmic, square_root,
-  world_football_elo, harmonic, harmonic_plus_one, saturated, capped.
-  Val log loss (one-feature logistic regression, k=8): none 0.9957, all others
+
+## ELO: margin of victory
+- Multiplier on k, normalized by its mean over train so the average k is unchanged.
+  9 shapes tested: none, linear, logarithmic, square_root, world_football_elo,
+  harmonic, harmonic_plus_one, saturated, capped.
+- Val log loss (one-feature logistic regression, k=8): none 0.9957, all others
   0.9958-0.9968. Grid over k in {2,...,16}: best per variant 0.9956 (none) to 0.9967
   (linear). No variant beats "none" (differences < 0.002, i.e. noise).
-- Conclusion: with this method, goal difference in the ELO adds nothing measurable.
-  Default stays "none"; the code is kept. Likely reasons (hypotheses): goals are
-  noisy, k is already low, and a multiplier is a patch (a real fix would model the
-  expected goal margin, e.g. Poisson / Dixon-Coles).
+- Conclusion: goal difference in the ELO adds nothing measurable. Default stays "none";
+  the code is kept. Hypotheses: goals are noisy, k is already low, and a multiplier is
+  a patch (a real fix would model the expected goal margin, e.g. Poisson / Dixon-Coles).
 - Normalization scales on train (mean G): none 1.00, saturated 1.21, square_root 1.22,
   world_football_elo 1.23, harmonic 1.25, logarithmic 1.33, capped 1.51,
   linear 1.60, harmonic_plus_one 1.99. Without normalizing, harmonic_plus_one would
   have doubled the effective k.
 
-  ## Standings features
-- Added per team (home/away): points accumulated before the match, distance in points
-  to the 7th place (Europe) and to the 18th place (relegation). Computed per date, only
-  from previous matches. No tie-breaks needed (only points matter).
-- Leakage audit: mutation test (changing a match result does not change that match's
-  features) passed.
-- Walk-forward ablation (diff = base - variant, positive = variant better):
-  acc_only +0.0011 (CI -0.0003, +0.0023), acc+dist +0.0019 (CI +0.0001, +0.0038),
-  remaining_only +0.0007, all8 +0.0023 (CI +0.0003, +0.0042).
-- Decision: adopt acc+dist (6 columns). points_remaining adds ~0.0004 (noise).
-- Caveats: CI barely excludes 0; 2022/23 goes against in most variants; several
-  comparisons on the same folds.
-- Model seed (random_state) moves Optuna's best val log loss by ~0.001, the same size
-  as the improvements measured. Pending: repeat walk-forward with 3 seeds.
-- Retuned XGBoost val log loss: 0.9934 (same as before, within noise).
-
-  ## Validation system
+## Validation system
 - Walk-forward: 5 folds, train always the past (starting 2015/16, warmup excluded),
   validate on the next season (2018/19 ... 2022/23). Test untouched.
 - Baseline (no market, tuned params): per-season Log Loss 1.0248, 1.0125, 0.9947,
@@ -95,9 +82,35 @@
 - Decision rule for a new feature: wins in >= 4 of 5 folds, relevant mean gain,
   bootstrap CI does not cross 0. Ties go to the simpler variant.
   Caveat: with many ideas tested, some pass by chance; test stays the final check.
+- Model seed (random_state) moves Optuna's best val log loss by ~0.001, the same size
+  as the improvements measured. The bootstrap does not capture this variance.
+  Pending: repeat walk-forward with 3 seeds.
+
+## Standings features (adopted)
+- Added per team (home/away): points accumulated before the match, distance in points
+  to the 7th place (Europe) and to the 18th place (relegation). Computed per date, only
+  from previous matches. No tie-breaks needed (only points matter).
+- Leakage audit: mutation test (changing a match result does not change that match's
+  features) passed.
+- Walk-forward ablation (diff = base - variant, positive = variant better):
+  acc_only +0.0011 (CI -0.0003, +0.0023), acc+dist +0.0019 (CI +0.0001, +0.0038),
+  remaining_only +0.0007, all8 +0.0023 (CI +0.0003, +0.0042).
+- Decision: adopt acc+dist (6 columns). points_remaining adds ~0.0004 (noise).
+- Caveats: CI barely excludes 0; 2022/23 goes against in most variants; several
+  comparisons on the same folds.
+- XGBoost retuned with these features: val log loss 0.9934 (same as before, within
+  noise; the walk-forward is the sensitive measure, not the 2-season val).
+
+## crowd_fraction (not adopted)
+- Approximate stadium capacity allowed during COVID (0 = closed doors, 1 = full), by
+  date tiers: 0.0 from 2020-03-12, 0.3 from 2021-05-14, 0.4 in Aug 2021, 0.6 in
+  Sep 2021. Tiers are UNVERIFIED approximations (real capacity varied by region).
+  558 matches marked (2019/20: 110, 2020/21: 380, 2021/22: 68).
+- Walk-forward: diff -0.0000, CI (-0.0004, +0.0004), better in 3/5 folds. Not adopted.
+- Kept in the CSV, excluded by default (select_features include_crowd=False).
 
 ## Gap vs the market
-- Test: ~0.975 (model) vs ~0.954 (B365 closing): ~0.02.
+- Test: ~0.974 (model) vs ~0.954 (B365 closing): ~0.02.
 - Val has been used several times to choose parameters, so its numbers are optimistic.
 - Test has been looked at several times; from now on it is only reported.
 
@@ -111,12 +124,18 @@
   wrong; measure instead of guessing.
 - A feature like goal_diff = FTHG - FTAG exists only after the match: using it as input
   is leakage. Past goal difference must come via rolling features or the ELO update.
+- A DataFrame shifted with .shift(1) after a groupby-cumsum leaks across groups;
+  the shift must happen inside the group (or subtract the current row instead).
+- Duplicate column names in the feature list crash XGBoost with a confusing error;
+  compare_feature_sets now checks for duplicates.
 
 ## To do
-1. Cheap ideas, each measured with walk-forward + paired bootstrap: fewer rolling
-   windows, matchday, no_crowd, home/away rolling. Then freeze the feature set.
-2. Opponent strength, home/away split, matchday, no_crowd, end-of-season handicap.
-3. Refactor: read the CSV inside main (not at module level in train.py), shared season
-   lists in one module, propagate elo_params to build_features.
-4. Optuna + MLflow nested runs, FastAPI + Docker, Prefect, Streamlit.
-5. goals model (Poisson / Dixon-Coles), opponent strength, end-of-season handicap.
+1. Home/away rolling features (venue-specific form), measured with walk-forward.
+2. Try fewer rolling windows (keep 1-2 of 3/5/7/10), exponential weighting.
+3. Freeze the feature set, then retune XGBoost once and report test once.
+4. Refactor: read the CSV inside main (not at module level in train.py), shared season
+   lists in one module, propagate elo_params to build_features, train.py main block
+   running only the final config.
+5. Optuna + MLflow nested runs, FastAPI + Docker, Prefect, Streamlit.
+6. Later layer: goals model (Poisson / Dixon-Coles), opponent strength, end-of-season
+   handicap, DVC/.gitignore fix for features file.
