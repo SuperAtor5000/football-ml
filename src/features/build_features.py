@@ -156,6 +156,10 @@ def calculate_elo(
         home_elos_list.append(elo_home_rating)
         away_elos_list.append(elo_away_rating)
 
+        # Future match (no result yet): keep the pre-match ELO, do not update ratings
+        if pd.isna(row["FTR"]):
+            continue
+
         # Determine actual scores based on match result
         if row["FTR"] == "H":
             actual_home_score = 1.0
