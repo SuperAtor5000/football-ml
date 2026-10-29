@@ -285,6 +285,7 @@ def compute_threshold_points(team_df: pd.DataFrame) -> pd.DataFrame:
 
 def add_no_crowd(df: pd.DataFrame) -> pd.DataFrame:
     """Approximate stadium capacity allowed (0 = closed doors, 1 = full)."""
+    df = df.copy()
     df["crowd_fraction"] = 1.0
     for start, end, fraction in CROWD_PERIODS:
         mask = (df["Date"] >= start) & (df["Date"] <= end)
