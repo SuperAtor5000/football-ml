@@ -38,6 +38,12 @@ def build_prediction_rows(history_df, matches, date=None):
     if len(teams_in_round) != len(set(teams_in_round)):
         raise ValueError("A team appears more than once in the round")
 
+    played_that_day = history_df[history_df["Date"] == date_str]
+    busy_teams = set(played_that_day["HomeTeam"]) | set(played_that_day["AwayTeam"])
+    already = [t for t in teams_in_round if t in busy_teams]
+    if already:
+        raise ValueError(f"Teams already have a match on {date_str}: {already}")
+
     future = pd.DataFrame(
         {
             "Date": date_str,
