@@ -1,17 +1,16 @@
 from collections import defaultdict
 from contextlib import asynccontextmanager
-
+import mlflow.xgboost
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from src.models.predict import (
     build_prediction_rows,
-    load_model,
     probabilities_to_dicts,
 )
 
-RUN_ID = "bf62dee2c4f04cbd867d47188a481ffe"
+MODEL_DIR = "models/final/model"
 HISTORY_FILE = "data/processed/laliga.csv"
 
 state = {}
@@ -21,7 +20,7 @@ state = {}
 async def lifespan(app: FastAPI):
     # Runs once at startup
     state["history"] = pd.read_csv(HISTORY_FILE)
-    state["model"] = load_model(RUN_ID)
+    state["model"] = mlflow.xgboost.load_model(MODEL_DIR)
     yield
 
 
