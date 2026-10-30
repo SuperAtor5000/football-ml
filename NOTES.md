@@ -2,6 +2,8 @@
 
 ## Data and splits
 - 4940 matches, 13 seasons (2013/14 to 2025/26), source: football-data.co.uk.
+  The 2026/27 season (in progress) is also loaded for serving (99 matches up to
+  2026-10-26) but is never used in train/val/test.
 - Train 2013/14-2020/21 (3040), val 2021/22-2022/23 (760), test 2023/24-2025/26 (1140).
 - Temporal split only, never random.
 - Pinnacle has no closing odds for 192 matches of 2025/26. The gap is in the source
@@ -22,13 +24,15 @@
 | XGBoost, default params | 1.2773 | 1.1978 |
 | XGBoost tuned, old ELO, with market | 0.9917 | 0.9714 |
 | XGBoost tuned, new ELO, no market, with warmup | 0.9934 | 0.9750 |
-| XGBoost tuned, + standings features (current) | 0.9934 | 0.9739 |
+| XGBoost tuned, + standings features (FINAL) | 0.9934 | 0.9739 |
 
 - Default XGBoost overfits (3040 rows, ~75 features); Optuna fixes it.
 - Good region: max_depth 2-3, strong regularization (reg_lambda ~50-100),
   learning_rate x n_estimators ~ 2-3.
 - Differences between the tuned variants (0.9917-0.9958 on val) are within noise.
 - Test numbers are only reported, never used to decide.
+- Final config: no market features, warmup (2013/14 and 2014/15 excluded from
+  training), 81 features (ELO + rolling + 6 standings columns).
 
 ## market_movement ablation
 - Single val (2021/22-2022/23): 0.9921 without vs 0.9917 with market (0.0004, noise).
@@ -53,6 +57,10 @@
   Warmup: 2013/14 and 2014/15 are used to compute ELO but not for training.
 - With XGBoost the new ELO did NOT measurably improve results (it did with the
   one-feature regression).
+- Any team absent the previous season is treated as "promoted" (1300), even if it
+  spent years in the top flight. Known limitation.
+- calculate_elo skips the rating update when FTR is NaN (unplayed match), so future
+  rows get their pre-match ELO without altering anyone's rating.
 
 ## ELO: margin of victory
 - Multiplier on k, normalized by its mean over train so the average k is unchanged.
@@ -79,6 +87,7 @@
   the two can't be separated.
 - Paired bootstrap on per-match loss differences (2000 resamples, with replacement).
   Verified with synthetic data (constant diff -0.1 -> CI (-0.1, -0.1)).
+- compare_feature_sets prints per-fold results, bootstrap CI and an automatic verdict.
 - Decision rule for a new feature: wins in >= 4 of 5 folds, relevant mean gain,
   bootstrap CI does not cross 0. Ties go to the simpler variant.
   Caveat: with many ideas tested, some pass by chance; test stays the final check.
@@ -101,20 +110,42 @@
 - XGBoost retuned with these features: val log loss 0.9934 (same as before, within
   noise; the walk-forward is the sensitive measure, not the 2-season val).
 
-## crowd_fraction (not adopted)
-- Approximate stadium capacity allowed during COVID (0 = closed doors, 1 = full), by
-  date tiers: 0.0 from 2020-03-12, 0.3 from 2021-05-14, 0.4 in Aug 2021, 0.6 in
-  Sep 2021. Tiers are UNVERIFIED approximations (real capacity varied by region).
-  558 matches marked (2019/20: 110, 2020/21: 380, 2021/22: 68).
-- Walk-forward: diff -0.0000, CI (-0.0004, +0.0004), better in 3/5 folds. Not adopted.
-- Kept in the CSV, excluded by default (select_features include_crowd=False).
+## Ideas tested and not adopted
+- crowd_fraction (approximate stadium capacity during COVID, UNVERIFIED tiers by date:
+  0.0 from 2020-03-12, 0.3 from 2021-05-14, 0.4 in Aug 2021, 0.6 in Sep 2021).
+  558 matches marked. Walk-forward diff -0.0000, CI (-0.0004, +0.0004), 3/5 folds.
+  Kept in the CSV, excluded by default (include_crowd=False).
+- venue_ppg (points per game in previous matches of the same venue type, NaN until 3
+  such matches, 15.8% NaN). Walk-forward diff +0.0000, CI (-0.0009, +0.0010), 3/5
+  folds. Likely already captured by ELO + standings + rolling form. Code kept in
+  build_features.py (add_venue_features), excluded from select_features.
 
-## Venue form (not adopted)
-- venue_ppg: points per game in previous matches of the same venue type (home for the
-  home team, away for the away team), NaN until 3 such matches (15.8% NaN).
-- Walk-forward: diff +0.0000, CI (-0.0009, +0.0010), better in 3/5 folds. Not adopted.
-- Likely already captured by ELO + standings + rolling form.
-- Code kept in build_features.py (add_venue_features); excluded from select_features.
+## Experiment tracking (MLflow)
+- Experiment "laliga-1X2-prediction". Each run logs: model type, hyperparameters
+  (log_params), include_market, warmup_seasons, features.json (ordered columns),
+  classes.json (A, D, H), the 6 metrics and the trained model.
+- MLflow 3: the model appears under "Models", not under the run's Artifacts tab.
+- Final run id: bf62dee2c4f04cbd867d47188a481ffe.
+
+## Serving
+- predict.py: build_prediction_rows adds unplayed matches (no FTR) to the history and
+  runs the SAME build_elo_and_rolling_features used for training, so training and
+  serving cannot diverge. Validated on Barcelona - Real Madrid (2025-05-11):
+  rebuilt row matches laliga_features.csv exactly.
+- Validations: unknown teams, a team twice in the round, and teams that already have a
+  match on that date (otherwise pivot fails with "duplicate entries").
+- One date per call; a round spread over several days is grouped by date.
+- Class order (A, D, H) comes from LabelEncoder (alphabetical); stored in classes.json.
+- Model exported with export_model.py to models/final/model (model.ubj, ~2 MB) plus
+  models/final/classes.json, so the API does not depend on the MLflow database.
+- API (FastAPI): POST /predict ({"matches": [{"home","away","date"}]}), GET /health.
+  Model and history are loaded once at startup (lifespan). Client errors return 422.
+- Tested on round 11 of 2026/27 (Barcelona - Alaves H=0.74, Santander - Real Madrid
+  A=0.57). Plausible, but not a validation: it needs the real results.
+- Data is NOT updated automatically: run download, process, build_features and restart
+  the API. The 2026/27 history is missing one match of round 10 (99 matches), so one
+  team has one game less in its rolling/standings features.
+- Each request recomputes the whole history (a few seconds per distinct date).
 
 ## Gap vs the market
 - Test: ~0.974 (model) vs ~0.954 (B365 closing): ~0.02.
@@ -135,13 +166,21 @@
   the shift must happen inside the group (or subtract the current row instead).
 - Duplicate column names in the feature list crash XGBoost with a confusing error;
   compare_feature_sets now checks for duplicates.
+- Defaults hide decisions (select_features defaults); pass flags explicitly in
+  experiments and log them in MLflow.
+- Asking for an already played match breaks the pivot in the standings code;
+  now rejected with an explicit message.
 
 ## To do
-1. Try fewer rolling windows (keep 1-2 of 3/5/7/10), exponential weighting.
-2. Freeze the feature set, then retune XGBoost once and report test once.
-3. Refactor: read the CSV inside main (not at module level in train.py), shared season
-   lists in one module, propagate elo_params to build_features, train.py main block
-   running only the final config.
-4. Optuna + MLflow nested runs, FastAPI + Docker, Prefect, Streamlit.
-5. Later layer: goals model (Poisson / Dixon-Coles), opponent strength, end-of-season
-   handicap, DVC/.gitignore fix for features file.
+1. Docker: Dockerfile copying src/, models/final, data/processed/laliga.csv and deps.
+2. Prefect: download -> process -> build_features on a schedule, then restart/reload.
+3. Streamlit front end calling the API.
+4. pytest: automate the training/serving feature match (several matches, including
+   early-season ones with NaN rolling values).
+5. Refactor: read the CSV inside main (not at module level in train.py), shared season
+   lists in one module, propagate elo_params to build_features, run id from an env
+   variable, DVC/.gitignore fix for the features file.
+6. Fewer rolling windows (keep 1-2 of 3/5/7/10), repeat walk-forward with 3 seeds,
+   average several seeds in the final model, probability calibration.
+7. Later layer: goals model (Poisson / Dixon-Coles), opponent strength, end-of-season
+   handicap.
