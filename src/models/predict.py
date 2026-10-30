@@ -3,6 +3,8 @@ import mlflow.xgboost
 from src.features.build_features import build_elo_and_rolling_features
 from src.models.train import select_features
 
+CLASSES = ["A", "D", "H"]  # order given by the LabelEncoder (classes.json)
+
 
 def season_from_date(date) -> str:
     """Return the season label (e.g. '2026/27') for a date."""
@@ -53,14 +55,20 @@ def build_prediction_rows(history_df, matches, date=None):
     return rows[select_features(include_market=False)].reset_index(drop=True)
 
 
-def predict_probabilities(features_df, run_id):
+def load_model(run_id):
+    """Load the trained model from MLflow."""
+    return mlflow.xgboost.load_model(f"runs:/{run_id}/model")
+
+
+def probabilities_to_dicts(model, features_df):
     """Return a list of {"A": p, "D": p, "H": p}, one per row of features_df."""
-    model = mlflow.xgboost.load_model(f"runs:/{run_id}/model")
-    probabilities = model.predict_proba(
-        features_df
-    )  # array: one row per match, 3 columns
-    classes = ["A", "D", "H"]  # order given by the LabelEncoder (classes.json)
-    return [{c: float(p) for c, p in zip(classes, row)} for row in probabilities]
+    probabilities = model.predict_proba(features_df)
+    return [{c: float(p) for c, p in zip(CLASSES, row)} for row in probabilities]
+
+
+def predict_probabilities(features_df, run_id):
+    """Convenience wrapper: load the model and predict."""
+    return probabilities_to_dicts(load_model(run_id), features_df)
 
 
 if __name__ == "__main__":
