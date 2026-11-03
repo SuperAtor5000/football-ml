@@ -4,9 +4,10 @@
 
 # Datos - los gestiona DVC, no git
 data/raw/laliga/
-data/processed/
-data/features/
-
+data/processed/*
+!data/processed/laliga.csv
+data/features/*
+!data/features/laliga_features.csv
 # Jupyter checkpoints
 .ipynb_checkpoints/
 notebooks/.ipynb_checkpoints/
